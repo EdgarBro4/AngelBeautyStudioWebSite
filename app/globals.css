@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  --gold: #D4AF37;
+  --gold-light: #F0D060;
+  --gold-dim: #9A7D20;
+  --gold-muted: rgba(212, 175, 55, 0.15);
+  --radius: 0.5rem;
+
+  /* dark defaults */
+  --bg: #09090b;
+  --bg-card: #111113;
+  --bg-elevated: #18181b;
+  --border-col: rgba(212, 175, 55, 0.2);
+  --text: #fafaf9;
+  --text-muted: #a1a1aa;
+
+  /* shadcn tokens */
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 240 10% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 10% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 45 74% 53%;
+  --primary-foreground: 0 0% 9%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 240 3.7% 15.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --ring: 45 74% 53%;
+}
+
+/* ── Light mode overrides ── */
+html.light {
+  --bg: #f8f5ef;
+  --bg-card: #faf8f4;
+  --bg-elevated: #f0ece2;
+  --border-col: rgba(164, 130, 30, 0.25);
+  --text: #1a1a1a;
+  --text-muted: #6b6b6b;
+
+  --background: 40 30% 97%;
+  --foreground: 0 0% 10%;
+  --card: 40 20% 96%;
+  --card-foreground: 0 0% 10%;
+  --popover: 40 20% 96%;
+  --popover-foreground: 0 0% 10%;
+  --secondary: 40 15% 90%;
+  --secondary-foreground: 0 0% 10%;
+  --muted: 40 15% 90%;
+  --muted-foreground: 0 0% 40%;
+  --accent: 40 15% 90%;
+  --accent-foreground: 0 0% 10%;
+  --border: 40 15% 85%;
+  --input: 40 15% 88%;
+}
+
+html.light body {
+  background-color: #f8f5ef;
+  color: #1a1a1a;
+}
+
+html.light ::-webkit-scrollbar-track { background: #f0ece2; }
+html.light ::-webkit-scrollbar-thumb { background: #b8952a; }
+
+/* Light mode — override hardcoded zinc/dark classes */
+html.light .bg-zinc-950 { background-color: #f8f5ef !important; }
+html.light .bg-zinc-900 { background-color: #f0ece2 !important; }
+html.light .bg-zinc-900\/40 { background-color: rgba(240, 236, 226, 0.8) !important; }
+html.light .bg-zinc-900\/60 { background-color: rgba(235, 230, 218, 0.9) !important; }
+html.light .bg-zinc-900\/30 { background-color: rgba(240, 236, 226, 0.6) !important; }
+html.light .bg-zinc-800 { background-color: #e8e0d0 !important; }
+html.light .bg-zinc-950\/95 { background-color: rgba(248, 245, 239, 0.97) !important; }
+html.light .bg-zinc-950\/98 { background-color: rgba(248, 245, 239, 0.99) !important; }
+html.light .bg-zinc-950\/96 { background-color: rgba(248, 245, 239, 0.98) !important; }
+html.light .text-white { color: #1a1a1a !important; }
+html.light .text-zinc-400 { color: #5a5a5a !important; }
+html.light .text-zinc-500 { color: #6b6b6b !important; }
+html.light .text-zinc-600 { color: #7a7a7a !important; }
+html.light .text-zinc-700 { color: #8a8a8a !important; }
+html.light .text-zinc-300 { color: #2a2a2a !important; }
+html.light .border-zinc-800 { border-color: rgba(164, 130, 30, 0.2) !important; }
+html.light .border-zinc-800\/50 { border-color: rgba(164, 130, 30, 0.15) !important; }
+html.light .border-zinc-800\/60 { border-color: rgba(164, 130, 30, 0.18) !important; }
+html.light .border-zinc-700 { border-color: rgba(164, 130, 30, 0.3) !important; }
+html.light .divide-zinc-800\/40 > * + * { border-color: rgba(164, 130, 30, 0.15) !important; }
+html.light .bg-zinc-950\/40 { background-color: rgba(240, 236, 226, 0.6) !important; }
+html.light .text-zinc-950 { color: #f8f5ef !important; }
+html.light input[class*="bg-zinc"] { background-color: #fdfaf5 !important; color: #1a1a1a !important; }
+html.light textarea[class*="bg-zinc"] { background-color: #fdfaf5 !important; color: #1a1a1a !important; }
+html.light select[class*="bg-zinc"] { background-color: #fdfaf5 !important; color: #1a1a1a !important; }
+
+/* Navbar opacity backgrounds */
+html.light .bg-zinc-950\/80 { background-color: rgba(248, 245, 239, 0.9) !important; }
+html.light .bg-zinc-950\/50 { background-color: rgba(248, 245, 239, 0.7) !important; }
+html.light .bg-zinc-950\/30 { background-color: rgba(248, 245, 239, 0.5) !important; }
+
+/* Navbar border opacity variants */
+html.light .border-zinc-800\/30 { border-color: rgba(164, 130, 30, 0.08) !important; }
+
+/* Missing text color overrides */
+html.light .text-zinc-100 { color: #1a1a1a !important; }
+html.light .text-zinc-200 { color: #2a2a2a !important; }
+html.light .text-zinc-600 { color: #6e6e6e !important; }
+html.light .text-zinc-800 { color: #888 !important; }
+
+/* Stats section */
+html.light .bg-zinc-900\/20 { background-color: rgba(240, 236, 226, 0.5) !important; }
+
+/* Horizontal gradient overrides (BookingCTA) — leave hero vertical gradient dark for photo readability */
+html.light .bg-gradient-to-r.from-zinc-950 {
+  --tw-gradient-from: #f8f5ef var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(248, 245, 239, 0) var(--tw-gradient-to-position) !important;
+}
+html.light .bg-gradient-to-r.to-zinc-950 {
+  --tw-gradient-to: #f8f5ef var(--tw-gradient-to-position) !important;
+}
+html.light .bg-gradient-to-r.via-zinc-900\/50 {
+  --tw-gradient-via: rgba(240, 236, 226, 0.5) var(--tw-gradient-via-position) !important;
+}
+
+/* ── Base ── */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.font-display { font-family: 'Cormorant Garamond', serif; }
+
+.gold-text {
+  background: linear-gradient(135deg, #D4AF37 0%, #F0D060 50%, #D4AF37 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+/* ── Loading animations ── */
+@keyframes scissors-open {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(25deg); }
+}
+@keyframes scissors-close {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-25deg); }
+}
+@keyframes golden-draw {
+  from { stroke-dashoffset: 1000; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes golden-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Scissors open/close — top blade goes up, bottom blade goes down */
+@keyframes snipTop {
+  0%, 100% { transform: rotate(0deg); }
+  35%, 65% { transform: rotate(-14deg); }
+}
+@keyframes snipBottom {
+  0%, 100% { transform: rotate(0deg); }
+  35%, 65% { transform: rotate(14deg); }
+}
+
+/* Nail brush stroke */
+@keyframes brush-stroke {
+  0% { stroke-dashoffset: 120; opacity: 0; }
+  20% { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+@keyframes nail-gloss {
+  0%, 100% { opacity: 0.3; transform: translateX(-4px); }
+  50% { opacity: 0.9; transform: translateX(4px); }
+}
+@keyframes polish-drip {
+  0% { transform: translateY(-2px); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translateY(8px); opacity: 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(212,175,55,0.3), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Step indicator */
+.step-active { background: linear-gradient(135deg, #D4AF37, #F0D060); color: #09090b; }
+.step-completed { background: #D4AF37; color: #09090b; }
+.step-inactive { background: #18181b; border: 1px solid rgba(212,175,55,0.3); color: #71717a; }
+
+html.light .step-inactive { background: #f0ece2; border-color: rgba(164,130,30,0.3); color: #9a9a9a; }
+
+/* Card hover effects */
+.service-card:hover { border-color: var(--gold) !important; box-shadow: 0 0 30px rgba(212,175,55,0.12); }
+.worker-card:hover { border-color: var(--gold) !important; box-shadow: 0 0 30px rgba(212,175,55,0.12); }
+.time-slot:hover:not(:disabled) { border-color: var(--gold) !important; background-color: rgba(212,175,55,0.1) !important; }
+.time-slot.selected { border-color: var(--gold) !important; background-color: rgba(212,175,55,0.15) !important; }
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
+}
