@@ -1,3 +1,3 @@
 # AngelBeautyStudioWebSite
 
-[![Open in Bolt](https://bolt.new/static/open-in-bolt.svg)](https://bolt.new/~/sb1-7yfk4hxz)
+website for beauty salons, barbershops where you can manage appointments, get reviews, add services workers with their own reviews and experience.
