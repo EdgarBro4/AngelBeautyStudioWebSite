@@ -59,7 +59,7 @@ export default function Footer() {
           <div>
             <h4 className="text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-6">Studio</h4>
             <ul className="space-y-3 text-sm text-zinc-500 font-light">
-              {['Book Appointment', 'Reviews', 'Gift Cards'].map((s) => (
+              {['Book Appointment', 'Reviews'].map((s) => (
                 <li key={s}>
                   <Link
                     href={s === 'Book Appointment' ? '/book' : s === 'Reviews' ? '#team' : '#'}
