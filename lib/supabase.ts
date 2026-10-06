@@ -7,7 +7,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const SUPABASE_URL = supabaseUrl;
 
-export type ServiceType = 'Hair' | "Men's" | 'Makeup' | 'Nails' | 'Skincare' | 'Other';
+export type ServiceType = 'Manicure' | 'Gel-X' | 'Pedicure' | 'Full Hair Services' | 'Barber Services' | 'Brows & Lashes' | 'Makeup Services' | 'Hair' | "Men's" | 'Makeup' | 'Nails' | 'Skincare' | 'Other';
 
 export type Worker = {
   id: string;
@@ -25,6 +25,17 @@ export type StudioSettings = {
   id: number;
   admin_phone: string | null;
   updated_at: string;
+};
+
+export type WorkerCategory = {
+  worker_id: string;
+  category: ServiceType;
+};
+
+export type WorkerServiceAssignment = {
+  worker_id: string;
+  service_id: string;
+  is_available: boolean;
 };
 
 export type Service = {

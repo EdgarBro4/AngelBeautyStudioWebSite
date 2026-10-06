@@ -8,12 +8,12 @@ import {
   Phone, Clock, Star, X, Save, LogOut, RefreshCw, MessageSquare,
   Quote, ShieldAlert, Search, Upload, Mail, Settings, Loader2, ArrowLeft
 } from 'lucide-react';
-import { supabase, SUPABASE_URL, type Worker, type Service, type Appointment, type Review, type StudioSettings } from '@/lib/supabase';
+import { supabase, SUPABASE_URL, type Worker, type Service, type Appointment, type Review, type StudioSettings, type ServiceType } from '@/lib/supabase';
 
 const TABS = ['Appointments', 'Workers', 'Services', 'Reviews', 'Settings'] as const;
 type Tab = typeof TABS[number];
 
-const SERVICE_TYPES = ['Hair', "Men's", 'Makeup', 'Nails', 'Other'] as const;
+const SERVICE_CATEGORIES: ServiceType[] = ['Manicure', 'Gel-X', 'Pedicure', 'Full Hair Services', 'Barber Services', 'Brows & Lashes', 'Makeup Services'];
 
 function getLADate(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
@@ -494,10 +494,13 @@ function AppointmentsTab() {
 function WorkersTab() {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [workerCategories, setWorkerCategories] = useState<Record<string, string[]>>({});
+  const [workerAssignments, setWorkerAssignments] = useState<Record<string, Record<string, boolean>>>({});
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: '', role: '', bio: '', specialty: '', image_url: '', phone: '' });
+  const [form, setForm] = useState({ name: '', role: '', bio: '', categories: [] as string[], serviceOverrides: {} as Record<string, boolean>, image_url: '', phone: '' });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -507,12 +510,18 @@ function WorkersTab() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function fetchWorkers() {
-    const [{ data: w }, { data: r }] = await Promise.all([
+    const [{ data: w }, { data: r }, { data: s }, { data: c }, { data: a }] = await Promise.all([
       supabase.from('workers').select('*').order('name'),
       supabase.from('reviews').select('id, worker_id, rating, feedback, customer_name, created_at'),
+      supabase.from('services').select('*').order('type').order('name'),
+      supabase.from('worker_categories').select('worker_id, category'),
+      supabase.from('worker_service_assignments').select('worker_id, service_id, is_available'),
     ]);
     if (w) setWorkers(w);
     if (r) setReviews(r);
+    if (s) setServices(s);
+    if (c) setWorkerCategories(c.reduce<Record<string, string[]>>((acc, row) => { (acc[row.worker_id] ??= []).push(row.category); return acc; }, {}));
+    if (a) setWorkerAssignments(a.reduce<Record<string, Record<string, boolean>>>((acc, row) => { (acc[row.worker_id] ??= {})[row.service_id] = row.is_available; return acc; }, {}));
     setLoading(false);
   }
   useEffect(() => { fetchWorkers(); }, []);
@@ -524,7 +533,8 @@ function WorkersTab() {
   }
 
   function startEdit(w: Worker) {
-    setForm({ name: w.name, role: w.role, bio: w.bio ?? '', specialty: w.specialty ?? '', image_url: w.image_url ?? '', phone: w.phone ?? '' });
+    const categories = workerCategories[w.id] ?? (w.specialty ? [w.specialty] : []);
+    setForm({ name: w.name, role: w.role, bio: w.bio ?? '', categories, serviceOverrides: workerAssignments[w.id] ?? {}, image_url: w.image_url ?? '', phone: w.phone ?? '' });
     setUploadError('');
     setEditingId(w.id); setShowAdd(false);
   }
@@ -551,15 +561,26 @@ function WorkersTab() {
       name: form.name,
       role: form.role,
       bio: form.bio || null,
-      specialty: form.specialty || null,
+      specialty: form.categories[0] || null,
       image_url: form.image_url || null,
       phone: form.phone || null,
     };
+    let workerId = editingId;
     if (editingId) await supabase.from('workers').update(payload).eq('id', editingId);
-    else await supabase.from('workers').insert(payload);
+    else {
+      const { data } = await supabase.from('workers').insert(payload).select('id').maybeSingle();
+      workerId = data?.id ?? null;
+    }
+    if (workerId) {
+      await supabase.from('worker_categories').delete().eq('worker_id', workerId);
+      if (form.categories.length) await supabase.from('worker_categories').insert(form.categories.map((category) => ({ worker_id: workerId, category })));
+      await supabase.from('worker_service_assignments').delete().eq('worker_id', workerId);
+      const overrides = Object.entries(form.serviceOverrides).map(([service_id, is_available]) => ({ worker_id: workerId, service_id, is_available }));
+      if (overrides.length) await supabase.from('worker_service_assignments').insert(overrides);
+    }
     await fetchWorkers();
     setEditingId(null); setShowAdd(false);
-    setForm({ name: '', role: '', bio: '', specialty: '', image_url: '', phone: '' });
+    setForm({ name: '', role: '', bio: '', categories: [], serviceOverrides: {}, image_url: '', phone: '' });
     setSaving(false);
   }
 
@@ -588,7 +609,6 @@ function WorkersTab() {
   }
 
   const isEditing = editingId !== null || showAdd;
-  const SPECIALTY_OPTIONS = ['Hair', "Men's", 'Makeup', 'Nails', 'Other'];
 
   return (
     <div>
@@ -599,7 +619,7 @@ function WorkersTab() {
         </div>
         {!isEditing && (
           <button
-            onClick={() => { setShowAdd(true); setForm({ name: '', role: '', bio: '', specialty: '', image_url: '', phone: '' }); setUploadError(''); setEditingId(null); }}
+            onClick={() => { setShowAdd(true); setForm({ name: '', role: '', bio: '', categories: [], serviceOverrides: {}, image_url: '', phone: '' }); setUploadError(''); setEditingId(null); }}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-zinc-950 rounded-sm"
             style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}
           >
@@ -652,15 +672,37 @@ function WorkersTab() {
               <FormField label="Title / Role" value={form.role} onChange={(v) => setForm((f) => ({ ...f, role: v }))} />
               <FormField label="Phone (for booking SMS)" value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} type="tel" />
               <div>
-                <label className="block text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-2">Specialty</label>
-                <select
-                  value={form.specialty}
-                  onChange={(e) => setForm((f) => ({ ...f, specialty: e.target.value }))}
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded-sm px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37] text-sm transition-colors"
-                >
-                  <option value="">— Select specialty —</option>
-                  {SPECIALTY_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <label className="block text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-2">Categories</label>
+                <div className="grid grid-cols-1 gap-2 rounded-sm border border-zinc-700 bg-zinc-900 p-3">
+                  {SERVICE_CATEGORIES.map((category) => (
+                    <label key={category} className="flex items-center gap-2 text-sm text-zinc-300">
+                      <input type="checkbox" checked={form.categories.includes(category)} onChange={(e) => setForm((f) => ({ ...f, categories: e.target.checked ? [...f.categories, category] : f.categories.filter((item) => item !== category) }))} className="accent-[#D4AF37]" />
+                      {category}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mb-6">
+              <label className="block text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-2">Individual Service Access</label>
+              <p className="mb-3 text-xs text-zinc-500">Category access includes every service in that category. Use these switches to exclude individual services or add services from another category.</p>
+              <div className="grid grid-cols-1 gap-2 rounded-sm border border-zinc-700 bg-zinc-900 p-4 sm:grid-cols-2">
+                {services.map((service) => {
+                  const defaultAvailable = form.categories.includes(service.type);
+                  const available = form.serviceOverrides[service.id] ?? defaultAvailable;
+                  return (
+                    <label key={service.id} className="flex items-center gap-2 text-xs text-zinc-300">
+                      <input type="checkbox" checked={available} onChange={(e) => setForm((f) => {
+                        const next = { ...f.serviceOverrides };
+                        if (e.target.checked === defaultAvailable) delete next[service.id];
+                        else next[service.id] = e.target.checked;
+                        return { ...f, serviceOverrides: next };
+                      })} className="accent-[#D4AF37]" />
+                      <span>{service.name}</span>
+                      <span className="ml-auto text-zinc-600">{service.type}</span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
             <div className="mb-6">
@@ -668,7 +710,7 @@ function WorkersTab() {
               <textarea value={form.bio} onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))} rows={3} className="w-full bg-zinc-900 border border-zinc-700 rounded-sm px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37] resize-none text-sm" />
             </div>
             <div className="flex gap-3">
-              <button onClick={saveWorker} disabled={saving || !form.name || !form.specialty || uploading} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-zinc-950 rounded-sm disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}>
+              <button onClick={saveWorker} disabled={saving || !form.name || !form.categories.length || uploading} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-zinc-950 rounded-sm disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}>
                 <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
               </button>
               <button onClick={() => { setEditingId(null); setShowAdd(false); }} className="px-6 py-2.5 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-sm transition-colors">Cancel</button>
@@ -690,7 +732,7 @@ function WorkersTab() {
                   <div className="flex-1 min-w-0">
                     <p className="text-white font-medium truncate">{w.name}</p>
                     <p className="text-xs text-[#D4AF37] tracking-widest uppercase mt-0.5">{w.role}</p>
-                    {w.specialty && <p className="text-xs text-zinc-500 mt-0.5">{w.specialty}</p>}
+                    {(workerCategories[w.id] ?? (w.specialty ? [w.specialty] : [])).map((category) => <p key={category} className="text-xs text-zinc-500 mt-0.5">{category}</p>)}
                     <div className="flex items-center gap-1 mt-1.5">
                       <Star className="w-3 h-3 fill-[#D4AF37] text-[#D4AF37]" />
                       <span className="text-xs text-zinc-400">{avg ?? 'No reviews'}</span>
@@ -751,7 +793,7 @@ function ServicesTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', type: 'Hair' as Service['type'], duration: '60', price: '', description: '' });
+  const [form, setForm] = useState({ name: '', type: 'Manicure' as Service['type'], duration: '60', price: '', description: '' });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -774,7 +816,7 @@ function ServicesTab() {
     else await supabase.from('services').insert(payload);
     await fetchServices();
     setEditingId(null); setShowAdd(false);
-    setForm({ name: '', type: 'Hair', duration: '60', price: '', description: '' });
+    setForm({ name: '', type: 'Manicure', duration: '60', price: '', description: '' });
     setSaving(false);
   }
 
@@ -820,9 +862,9 @@ function ServicesTab() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <FormField label="Name" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} />
               <div>
-                <label className="block text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-2">Type</label>
+                <label className="block text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-2">Category</label>
                 <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as Service['type'] }))} className="w-full bg-zinc-900 border border-zinc-700 rounded-sm px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37] text-sm transition-colors">
-                  {SERVICE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  {SERVICE_CATEGORIES.map((t) => <option key={t} value={t}>{t}</option>) }
                 </select>
               </div>
               <FormField label="Duration (min)" value={form.duration} onChange={(v) => setForm((f) => ({ ...f, duration: v }))} type="number" />

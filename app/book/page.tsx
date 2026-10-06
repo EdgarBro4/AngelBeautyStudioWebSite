@@ -19,7 +19,7 @@ const ALL_SLOTS = [
   '6:00 PM', '6:30 PM', '7:00 PM',
 ];
 
-const SERVICE_TYPES = ["Hair", "Men's", "Makeup", "Nails"];
+const SERVICE_TYPES = ['Manicure', 'Gel-X', 'Pedicure', 'Full Hair Services', 'Barber Services', 'Brows & Lashes', 'Makeup Services'];
 
 const slideVariants = {
   enter: (dir: number) => ({ x: dir > 0 ? 80 : -80, opacity: 0 }),
@@ -86,6 +86,8 @@ export default function BookingPage() {
   const [dir, setDir] = useState(1);
   const [services, setServices] = useState<Service[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [workerCategories, setWorkerCategories] = useState<Record<string, string[]>>({});
+  const [workerAssignments, setWorkerAssignments] = useState<Record<string, Record<string, boolean>>>({});
   const [workerReviews, setWorkerReviews] = useState<Record<string, Review[]>>({});
   const [bookedAppointments, setBookedAppointments] = useState<{ time: string; duration: number }[]>([]);
   const [expandedReviews, setExpandedReviews] = useState<string | null>(null);
@@ -118,8 +120,14 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (step !== 1) return;
-    supabase.from('workers').select('*').then(({ data }) => {
-      if (data) setWorkers(data);
+    Promise.all([
+      supabase.from('workers').select('*'),
+      supabase.from('worker_categories').select('worker_id, category'),
+      supabase.from('worker_service_assignments').select('worker_id, service_id, is_available'),
+    ]).then(([{ data: workerData }, { data: categoryData }, { data: assignmentData }]) => {
+      if (workerData) setWorkers(workerData);
+      if (categoryData) setWorkerCategories(categoryData.reduce<Record<string, string[]>>((acc, row) => { (acc[row.worker_id] ??= []).push(row.category); return acc; }, {}));
+      if (assignmentData) setWorkerAssignments(assignmentData.reduce<Record<string, Record<string, boolean>>>((acc, row) => { (acc[row.worker_id] ??= {})[row.service_id] = row.is_available; return acc; }, {}));
     });
     supabase.from('reviews').select('*').order('created_at', { ascending: false }).then(({ data }) => {
       if (data) {
@@ -246,9 +254,12 @@ export default function BookingPage() {
     for (let m = start; m < start + appt.duration; m += 30) blockedMinutes.add(m);
   }
 
-  const filteredWorkers = workers.filter(
-    (w) => !w.specialty || w.specialty === selectedService?.type
-  );
+  const filteredWorkers = workers.filter((w) => {
+    if (!selectedService) return false;
+    const categories = workerCategories[w.id] ?? (w.specialty ? [w.specialty] : []);
+    const override = workerAssignments[w.id]?.[selectedService.id];
+    return override ?? categories.includes(selectedService.type);
+  });
 
   if (bookingComplete) {
     return (
