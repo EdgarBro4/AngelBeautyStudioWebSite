@@ -495,6 +495,7 @@ function WorkersTab() {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [serviceCategories, setServiceCategories] = useState<string[]>(SERVICE_CATEGORIES);
   const [workerCategories, setWorkerCategories] = useState<Record<string, string[]>>({});
   const [workerAssignments, setWorkerAssignments] = useState<Record<string, Record<string, boolean>>>({});
   const [loading, setLoading] = useState(true);
@@ -510,16 +511,18 @@ function WorkersTab() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function fetchWorkers() {
-    const [{ data: w }, { data: r }, { data: s }, { data: c }, { data: a }] = await Promise.all([
+    const [{ data: w }, { data: r }, { data: s }, { data: c }, { data: a }, { data: categoryData }] = await Promise.all([
       supabase.from('workers').select('*').order('name'),
       supabase.from('reviews').select('id, worker_id, rating, feedback, customer_name, created_at'),
       supabase.from('services').select('*').order('type').order('name'),
       supabase.from('worker_categories').select('worker_id, category'),
       supabase.from('worker_service_assignments').select('worker_id, service_id, is_available'),
+      supabase.from('service_categories').select('name').order('name'),
     ]);
     if (w) setWorkers(w);
     if (r) setReviews(r);
     if (s) setServices(s);
+    if (categoryData?.length) setServiceCategories(categoryData.map((row) => row.name));
     if (c) setWorkerCategories(c.reduce<Record<string, string[]>>((acc, row) => { (acc[row.worker_id] ??= []).push(row.category); return acc; }, {}));
     if (a) setWorkerAssignments(a.reduce<Record<string, Record<string, boolean>>>((acc, row) => { (acc[row.worker_id] ??= {})[row.service_id] = row.is_available; return acc; }, {}));
     setLoading(false);
@@ -675,7 +678,7 @@ function WorkersTab() {
               <div>
                 <label className="block text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-2">Categories</label>
                 <div className="grid grid-cols-1 gap-2 rounded-sm border border-zinc-700 bg-zinc-900 p-3">
-                  {SERVICE_CATEGORIES.map((category) => (
+                  {serviceCategories.map((category) => (
                     <label key={category} className="flex items-center gap-2 text-sm text-zinc-300">
                       <input type="checkbox" checked={form.categories.includes(category)} onChange={(e) => setForm((f) => ({ ...f, categories: e.target.checked ? [...f.categories, category] : f.categories.filter((item) => item !== category) }))} className="accent-[#D4AF37]" />
                       {category}
@@ -789,167 +792,164 @@ function WorkersTab() {
 
 /* ─── Services ─── */
 function ServicesTab() {
+  type ServiceCategory = { id: string; name: string };
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
+  const [showServiceForm, setShowServiceForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', type: 'Manicure' as Service['type'], duration: '60', price: '', description: '' });
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [categoryError, setCategoryError] = useState('');
+  const [form, setForm] = useState({ name: '', duration: '60', price: '', description: '' });
+  const [categoryName, setCategoryName] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   async function fetchServices() {
-    const { data } = await supabase.from('services').select('*').order('type').order('name');
-    if (data) setServices(data);
+    const [{ data: serviceData }, { data: categoryData }] = await Promise.all([
+      supabase.from('services').select('*').order('type').order('name'),
+      supabase.from('service_categories').select('id, name').order('name'),
+    ]);
+    if (serviceData) setServices(serviceData);
+    if (categoryData) {
+      setCategories(categoryData);
+      setSelectedCategoryId((current) => current ?? categoryData[0]?.id ?? null);
+    }
     setLoading(false);
   }
   useEffect(() => { fetchServices(); }, []);
 
+  const selectedCategory = categories.find((category) => category.id === selectedCategoryId) ?? null;
+  const selectedServices = selectedCategory ? services.filter((service) => service.type === selectedCategory.name) : [];
+  const isEditingService = editingId !== null || showServiceForm;
+
+  function startAddService() {
+    if (!selectedCategory) return;
+    setEditingId(null);
+    setForm({ name: '', duration: '60', price: '', description: '' });
+    setShowServiceForm(true);
+    setConfirmDeleteId(null);
+  }
+
   function startEdit(s: Service) {
-    setForm({ name: s.name, type: s.type, duration: String(s.duration), price: String(s.price), description: s.description ?? '' });
-    setEditingId(s.id); setShowAdd(false);
+    const category = categories.find((item) => item.name === s.type);
+    if (category) setSelectedCategoryId(category.id);
+    setForm({ name: s.name, duration: String(s.duration), price: String(s.price), description: s.description ?? '' });
+    setEditingId(s.id);
+    setShowServiceForm(false);
+    setConfirmDeleteId(null);
   }
 
   async function saveService() {
+    if (!selectedCategory) return;
     setSaving(true);
-    const payload = { name: form.name, type: form.type, duration: parseInt(form.duration), price: parseFloat(form.price), description: form.description || null };
+    const payload = { name: form.name.trim(), type: selectedCategory.name, duration: parseInt(form.duration, 10), price: parseFloat(form.price), description: form.description.trim() || null };
     if (editingId) await supabase.from('services').update(payload).eq('id', editingId);
     else await supabase.from('services').insert(payload);
     await fetchServices();
-    setEditingId(null); setShowAdd(false);
-    setForm({ name: '', type: 'Manicure', duration: '60', price: '', description: '' });
+    setEditingId(null);
+    setShowServiceForm(false);
+    setForm({ name: '', duration: '60', price: '', description: '' });
     setSaving(false);
+  }
+
+  async function saveCategory() {
+    const name = categoryName.trim();
+    if (!name) return;
+    setSavingCategory(true);
+    setCategoryError('');
+    const { data, error } = await supabase.from('service_categories').insert({ name }).select('id, name').maybeSingle();
+    if (error) setCategoryError(error.code === '23505' ? 'That category already exists.' : 'Could not create the category.');
+    else if (data) {
+      setCategories((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setSelectedCategoryId(data.id);
+      setCategoryName('');
+      setShowCategoryForm(false);
+    }
+    setSavingCategory(false);
   }
 
   async function confirmDeleteService() {
     if (!confirmDeleteId) return;
     setDeleting(true);
     await supabase.from('services').delete().eq('id', confirmDeleteId);
-    setServices((prev) => prev.filter((s) => s.id !== confirmDeleteId));
+    setServices((prev) => prev.filter((service) => service.id !== confirmDeleteId));
     setConfirmDeleteId(null);
     setDeleting(false);
   }
 
-  const grouped = services.reduce<Record<string, Service[]>>((acc, s) => {
-    if (!acc[s.type]) acc[s.type] = [];
-    acc[s.type].push(s);
-    return acc;
-  }, {});
-
-  const isEditing = editingId !== null || showAdd;
-
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-8 gap-4 flex-wrap">
         <div>
-          <h2 className="text-2xl font-display text-white">Services Menu</h2>
-          <p className="text-zinc-500 text-sm mt-1">{services.length} services</p>
+          <h2 className="text-2xl font-display text-white">Service Categories</h2>
+          <p className="text-zinc-500 text-sm mt-1">{categories.length} categories · {services.length} services</p>
         </div>
-        {!isEditing && (
-          <button
-            onClick={() => { setShowAdd(true); setForm({ name: '', type: 'Hair', duration: '60', price: '', description: '' }); setEditingId(null); }}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-zinc-950 rounded-sm"
-            style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}
-          >
-            <Plus className="w-4 h-4" /> Add Service
+        {!showCategoryForm && !isEditingService && (
+          <button onClick={() => { setShowCategoryForm(true); setCategoryError(''); }} className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-zinc-950 rounded-sm" style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}>
+            <Plus className="w-4 h-4" /> Add Category
           </button>
         )}
       </div>
 
       <AnimatePresence>
-        {isEditing && (
-          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="p-6 border border-[#D4AF37]/40 rounded-sm bg-zinc-900/60 mb-8">
-            <h3 className="text-[#D4AF37] text-xs tracking-widest uppercase mb-6">{editingId ? 'Edit Service' : 'New Service'}</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <FormField label="Name" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} />
-              <div>
-                <label className="block text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-2">Category</label>
-                <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as Service['type'] }))} className="w-full bg-zinc-900 border border-zinc-700 rounded-sm px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37] text-sm transition-colors">
-                  {SERVICE_CATEGORIES.map((t) => <option key={t} value={t}>{t}</option>) }
-                </select>
-              </div>
-              <FormField label="Duration (min)" value={form.duration} onChange={(v) => setForm((f) => ({ ...f, duration: v }))} type="number" />
-              <FormField label="Price ($)" value={form.price} onChange={(v) => setForm((f) => ({ ...f, price: v }))} type="number" />
+        {showCategoryForm && (
+          <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} className="p-5 border border-[#D4AF37]/40 rounded-sm bg-zinc-900/60 mb-8">
+            <h3 className="text-[#D4AF37] text-xs tracking-widest uppercase mb-4">New Category</h3>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input value={categoryName} onChange={(e) => setCategoryName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveCategory(); }} placeholder="Category name" className="flex-1 bg-zinc-900 border border-zinc-700 rounded-sm px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:border-[#D4AF37] text-sm" autoFocus />
+              <button onClick={saveCategory} disabled={savingCategory || !categoryName.trim()} className="flex items-center justify-center gap-2 px-5 py-3 text-sm font-medium text-zinc-950 rounded-sm disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}>{savingCategory ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Create Category</button>
+              <button onClick={() => { setShowCategoryForm(false); setCategoryName(''); setCategoryError(''); }} className="px-5 py-3 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-sm">Cancel</button>
             </div>
-            <div className="mb-6">
-              <label className="block text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-2">Description (optional)</label>
-              <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} className="w-full bg-zinc-900 border border-zinc-700 rounded-sm px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37] resize-none text-sm" />
-            </div>
-            <div className="flex gap-3">
-              <button onClick={saveService} disabled={saving || !form.name || form.price === ''} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-zinc-950 rounded-sm disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}>
-                <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
-              </button>
-              <button onClick={() => { setEditingId(null); setShowAdd(false); }} className="px-6 py-2.5 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-sm transition-colors">Cancel</button>
-            </div>
+            {categoryError && <p className="text-red-400 text-xs mt-3">{categoryError}</p>}
           </motion.div>
         )}
       </AnimatePresence>
 
       {loading ? (
-        <div className="space-y-3">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-14 bg-zinc-900 rounded-sm animate-pulse" />)}</div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-32 bg-zinc-900 rounded-sm animate-pulse" />)}</div>
       ) : (
-        <div className="space-y-10">
-          {Object.entries(grouped).map(([type, svcs]) => (
-            <div key={type}>
-              <h3 className="text-xs tracking-[0.4em] text-[#D4AF37] uppercase mb-4">{type}</h3>
-              <div className="space-y-2">
-                {svcs.map((s) => (
-                  <div key={s.id}>
-                    <div className={`flex items-center justify-between p-4 border rounded-sm bg-zinc-900/40 group transition-colors ${confirmDeleteId === s.id ? 'border-red-500/40' : 'border-zinc-800'}`}>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium">{s.name}</p>
-                        <div className="flex items-center gap-3 mt-0.5">
-                          <span className="flex items-center gap-1 text-xs text-zinc-600"><Clock className="w-3 h-3" />{s.duration} min</span>
-                          {s.description && <span className="text-xs text-zinc-700 truncate">{s.description}</span>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="font-display text-lg text-[#D4AF37]">{s.price === 0 ? 'Consultation' : `${s.price}`}</span>
-                        <button onClick={() => startEdit(s)} className="w-8 h-8 flex items-center justify-center border border-zinc-700 rounded-sm text-zinc-500 hover:text-[#D4AF37] hover:border-[#D4AF37]/50 transition-colors opacity-0 group-hover:opacity-100"><Edit2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => setConfirmDeleteId(s.id)} className="w-8 h-8 flex items-center justify-center border border-zinc-700 rounded-sm text-zinc-500 hover:text-red-400 hover:border-red-500/30 transition-colors opacity-0 group-hover:opacity-100"><Trash2 className="w-3.5 h-3.5" /></button>
-                      </div>
-                    </div>
+        <>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            {categories.map((category) => {
+              const count = services.filter((service) => service.type === category.name).length;
+              const active = category.id === selectedCategoryId;
+              return (
+                <button key={category.id} onClick={() => { setSelectedCategoryId(category.id); setEditingId(null); setShowServiceForm(false); setConfirmDeleteId(null); }} className={`text-left p-5 border rounded-sm transition-all ${active ? 'border-[#D4AF37] bg-[#D4AF37]/10' : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-600'}`}>
+                  <div className="flex items-start justify-between gap-3"><h3 className="text-white font-display text-xl">{category.name}</h3><span className="text-xs text-[#D4AF37] border border-[#D4AF37]/30 rounded-full px-2 py-1">{count}</span></div>
+                  <p className="text-zinc-500 text-xs mt-4">Click to manage services</p>
+                </button>
+              );
+            })}
+          </div>
 
-                    <AnimatePresence>
-                      {confirmDeleteId === s.id && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="mt-1 p-4 border border-red-500/30 rounded-sm bg-red-500/5 flex items-center justify-between gap-4">
-                            <div>
-                              <p className="text-white text-sm font-medium">Delete &ldquo;{s.name}&rdquo;?</p>
-                              <p className="text-zinc-500 text-xs mt-0.5">This service will be removed permanently.</p>
-                            </div>
-                            <div className="flex gap-2 shrink-0">
-                              <button
-                                onClick={() => setConfirmDeleteId(null)}
-                                className="px-4 py-2 text-xs text-zinc-400 border border-zinc-700 rounded-sm hover:text-white hover:border-zinc-500 transition-colors"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                onClick={confirmDeleteService}
-                                disabled={deleting}
-                                className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-red-500/20 border border-red-500/40 rounded-sm hover:bg-red-500/30 transition-colors disabled:opacity-50"
-                              >
-                                {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                ))}
+          {selectedCategory && (
+            <div className="border-t border-zinc-800 pt-8">
+              <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+                <div><p className="text-xs tracking-[0.3em] text-[#D4AF37] uppercase">Category</p><h3 className="font-display text-2xl text-white mt-1">{selectedCategory.name}</h3></div>
+                {!isEditingService && <button onClick={startAddService} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-zinc-950 rounded-sm" style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}><Plus className="w-4 h-4" /> Add Service</button>}
               </div>
+
+              <AnimatePresence>
+                {isEditingService && (
+                  <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="p-6 border border-[#D4AF37]/40 rounded-sm bg-zinc-900/60 mb-6">
+                    <h3 className="text-[#D4AF37] text-xs tracking-widest uppercase mb-5">{editingId ? 'Edit Service' : `New Service in ${selectedCategory.name}`}</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4"><FormField label="Name" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} /><FormField label="Duration (min)" value={form.duration} onChange={(value) => setForm((current) => ({ ...current, duration: value }))} type="number" /><FormField label="Price ($)" value={form.price} onChange={(value) => setForm((current) => ({ ...current, price: value }))} type="number" /></div>
+                    <div className="mb-6"><label className="block text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-2">Description (optional)</label><textarea value={form.description} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} rows={2} className="w-full bg-zinc-900 border border-zinc-700 rounded-sm px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37] resize-none text-sm" /></div>
+                    <div className="flex gap-3"><button onClick={saveService} disabled={saving || !form.name.trim() || form.price === ''} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-zinc-950 rounded-sm disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}><Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Service'}</button><button onClick={() => { setEditingId(null); setShowServiceForm(false); }} className="px-6 py-2.5 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-sm">Cancel</button></div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {selectedServices.length === 0 ? <div className="text-center py-12 border border-dashed border-zinc-800 rounded-sm text-zinc-600 text-sm">No services in this category yet.</div> : <div className="space-y-2">{selectedServices.map((service) => <div key={service.id} className={`flex items-center justify-between gap-4 p-4 border rounded-sm bg-zinc-900/40 group ${confirmDeleteId === service.id ? 'border-red-500/40' : 'border-zinc-800'}`}><div className="min-w-0"><p className="text-white text-sm font-medium">{service.name}</p><div className="flex items-center gap-3 mt-1"><span className="flex items-center gap-1 text-xs text-zinc-600"><Clock className="w-3 h-3" />{service.duration} min</span>{service.description && <span className="text-xs text-zinc-600 truncate">{service.description}</span>}</div></div><div className="flex items-center gap-3 shrink-0"><span className="font-display text-lg text-[#D4AF37]">{service.price === 0 ? 'Consultation' : `${service.price}`}</span><button onClick={() => startEdit(service)} className="w-8 h-8 flex items-center justify-center border border-zinc-700 rounded-sm text-zinc-500 hover:text-[#D4AF37] transition-colors"><Edit2 className="w-3.5 h-3.5" /></button><button onClick={() => setConfirmDeleteId(service.id)} className="w-8 h-8 flex items-center justify-center border border-zinc-700 rounded-sm text-zinc-500 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button></div></div>)}</div>}
+
+              <AnimatePresence>{confirmDeleteId && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden"><div className="mt-4 p-4 border border-red-500/30 rounded-sm bg-red-500/5 flex items-center justify-between gap-4"><p className="text-white text-sm">Delete this service?</p><div className="flex gap-2"><button onClick={() => setConfirmDeleteId(null)} className="px-4 py-2 text-xs text-zinc-400 border border-zinc-700 rounded-sm">Cancel</button><button onClick={confirmDeleteService} disabled={deleting} className="flex items-center gap-1.5 px-4 py-2 text-xs text-white bg-red-500/20 border border-red-500/40 rounded-sm disabled:opacity-50">{deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />} Delete</button></div></div></motion.div>}</AnimatePresence>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );
