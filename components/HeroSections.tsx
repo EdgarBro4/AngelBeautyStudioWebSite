@@ -67,10 +67,13 @@ export function ServicesHighlight() {
   const [activeModal, setActiveModal] = useState<{ title: string; type: string } | null>(null);
 
   const services = [
-    { title: "Women's Hair", type: 'Hair', desc: 'Cuts, blowouts, curls, and extensions tailored to you.' },
-    { title: "Men's Service", type: "Men's", desc: 'Precision fades, haircuts, and beard grooming.' },
-    { title: 'Makeup', type: 'Makeup', desc: 'From everyday glam to bridal and permanent makeup.' },
-    { title: 'Nails', type: 'Nails', desc: 'Manicures, pedicures, gel sets, and bespoke nail art.' },
+    { title: 'Manicure', type: 'Manicure', desc: 'Classic manicures, gel finishes, nail art, and repairs.' },
+    { title: 'Gel-X', type: 'Gel-X', desc: 'Full-cover gel extensions with polished, lasting results.' },
+    { title: 'Pedicure', type: 'Pedicure', desc: 'Relaxing pedicures with regular or gel polish options.' },
+    { title: 'Full Hair Services', type: 'Full Hair Services', desc: 'Cuts, blowouts, color, styling, treatments, and bridal hair.' },
+    { title: 'Barber Services', type: 'Barber Services', desc: 'Precision cuts, fades, beard grooming, and finishing.' },
+    { title: 'Brows & Lashes', type: 'Brows & Lashes', desc: 'Waxing, threading, tinting, lamination, and lash lifting.' },
+    { title: 'Makeup Services', type: 'Makeup Services', desc: 'Natural, glam, special occasion, and bridal makeup.' },
   ];
 
   return (
