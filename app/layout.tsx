@@ -2,6 +2,7 @@ import './globals.css';
 import type { Metadata } from 'next';
 import { ThemeProvider } from 'next-themes';
 import Script from 'next/script';
+import CookieConsent from '@/components/CookieConsent';
 
 export const metadata: Metadata = {
   title: 'Angel Beauty Studio | Luxury Hair & Nails',
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </ThemeProvider>
         <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />
+        <CookieConsent />
       </body>
     </html>
   );

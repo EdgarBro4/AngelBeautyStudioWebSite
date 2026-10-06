@@ -59,16 +59,12 @@ export default function Footer() {
           <div>
             <h4 className="text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-6">Studio</h4>
             <ul className="space-y-3 text-sm text-zinc-500 font-light">
-              {['Book Appointment', 'Reviews'].map((s) => (
-                <li key={s}>
-                  <Link
-                    href={s === 'Book Appointment' ? '/book' : s === 'Reviews' ? '#team' : '#'}
-                    className="hover:text-zinc-200 transition-colors"
-                  >
-                    {s}
-                  </Link>
-                </li>
-              ))}
+              <li><Link href="/book" className="hover:text-zinc-200 transition-colors">Book Appointment</Link></li>
+              <li><Link href="#team" className="hover:text-zinc-200 transition-colors">Reviews</Link></li>
+              <li><Link href="/privacy-policy" className="hover:text-zinc-200 transition-colors">Privacy Policy</Link></li>
+              <li><Link href="/terms-of-service" className="hover:text-zinc-200 transition-colors">Terms of Service</Link></li>
+              <li><Link href="/cookies-policy" className="hover:text-zinc-200 transition-colors">Cookies Policy</Link></li>
+              <li><Link href="/refund-policy" className="hover:text-zinc-200 transition-colors">Refund Policy</Link></li>
             </ul>
           </div>
 
