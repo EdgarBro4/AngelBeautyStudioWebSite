@@ -533,7 +533,8 @@ function WorkersTab() {
   }
 
   function startEdit(w: Worker) {
-    const categories = workerCategories[w.id] ?? (w.specialty ? [w.specialty] : []);
+    const legacyCategoryMap: Record<string, string[]> = { Hair: ['Full Hair Services'], "Men's": ['Barber Services'], Makeup: ['Makeup Services'], Nails: ['Manicure', 'Gel-X', 'Pedicure'] };
+    const categories = workerCategories[w.id] ?? (w.specialty ? (legacyCategoryMap[w.specialty] ?? [w.specialty]) : []);
     setForm({ name: w.name, role: w.role, bio: w.bio ?? '', categories, serviceOverrides: workerAssignments[w.id] ?? {}, image_url: w.image_url ?? '', phone: w.phone ?? '' });
     setUploadError('');
     setEditingId(w.id); setShowAdd(false);
@@ -732,7 +733,7 @@ function WorkersTab() {
                   <div className="flex-1 min-w-0">
                     <p className="text-white font-medium truncate">{w.name}</p>
                     <p className="text-xs text-[#D4AF37] tracking-widest uppercase mt-0.5">{w.role}</p>
-                    {(workerCategories[w.id] ?? (w.specialty ? [w.specialty] : [])).map((category) => <p key={category} className="text-xs text-zinc-500 mt-0.5">{category}</p>)}
+                    {(workerCategories[w.id] ?? (w.specialty ? (({ Hair: ['Full Hair Services'], "Men's": ['Barber Services'], Makeup: ['Makeup Services'], Nails: ['Manicure', 'Gel-X', 'Pedicure'] } as Record<string, string[]>)[w.specialty] ?? [w.specialty]) : [])).map((category) => <p key={category} className="text-xs text-zinc-500 mt-0.5">{category}</p>)}
                     <div className="flex items-center gap-1 mt-1.5">
                       <Star className="w-3 h-3 fill-[#D4AF37] text-[#D4AF37]" />
                       <span className="text-xs text-zinc-400">{avg ?? 'No reviews'}</span>
@@ -875,7 +876,7 @@ function ServicesTab() {
               <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} className="w-full bg-zinc-900 border border-zinc-700 rounded-sm px-4 py-3 text-white focus:outline-none focus:border-[#D4AF37] resize-none text-sm" />
             </div>
             <div className="flex gap-3">
-              <button onClick={saveService} disabled={saving || !form.name || !form.price} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-zinc-950 rounded-sm disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}>
+              <button onClick={saveService} disabled={saving || !form.name || form.price === ''} className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-zinc-950 rounded-sm disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}>
                 <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
               </button>
               <button onClick={() => { setEditingId(null); setShowAdd(false); }} className="px-6 py-2.5 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-sm transition-colors">Cancel</button>
@@ -903,7 +904,7 @@ function ServicesTab() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <span className="font-display text-lg text-[#D4AF37]">${s.price}</span>
+                        <span className="font-display text-lg text-[#D4AF37]">{s.price === 0 ? 'Consultation' : `${s.price}`}</span>
                         <button onClick={() => startEdit(s)} className="w-8 h-8 flex items-center justify-center border border-zinc-700 rounded-sm text-zinc-500 hover:text-[#D4AF37] hover:border-[#D4AF37]/50 transition-colors opacity-0 group-hover:opacity-100"><Edit2 className="w-3.5 h-3.5" /></button>
                         <button onClick={() => setConfirmDeleteId(s.id)} className="w-8 h-8 flex items-center justify-center border border-zinc-700 rounded-sm text-zinc-500 hover:text-red-400 hover:border-red-500/30 transition-colors opacity-0 group-hover:opacity-100"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>

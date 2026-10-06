@@ -256,7 +256,8 @@ export default function BookingPage() {
 
   const filteredWorkers = workers.filter((w) => {
     if (!selectedService) return false;
-    const categories = workerCategories[w.id] ?? (w.specialty ? [w.specialty] : []);
+    const legacyCategoryMap: Record<string, string[]> = { Hair: ['Full Hair Services'], "Men's": ['Barber Services'], Makeup: ['Makeup Services'], Nails: ['Manicure', 'Gel-X', 'Pedicure'] };
+    const categories = workerCategories[w.id] ?? (w.specialty ? (legacyCategoryMap[w.specialty] ?? [w.specialty]) : []);
     const override = workerAssignments[w.id]?.[selectedService.id];
     return override ?? categories.includes(selectedService.type);
   });
@@ -335,7 +336,7 @@ export default function BookingPage() {
                           <span className="flex items-center gap-1 text-xs text-zinc-600 mt-1.5"><Clock className="w-3 h-3" />{s.duration} min</span>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <span className="font-display text-2xl text-[#D4AF37]">${s.price}</span>
+                          <span className="font-display text-2xl text-[#D4AF37]">{s.price === 0 ? 'Consultation' : `${s.price}`}</span>
                           {selectedService?.id === s.id && <Check className="w-4 h-4 text-[#D4AF37]" />}
                         </div>
                       </button>
@@ -474,7 +475,7 @@ export default function BookingPage() {
                     <Row label="Time" value={selectedTime} />
                     <div className="pt-3 border-t border-zinc-800 flex justify-between">
                       <span className="text-zinc-400 text-sm">Total</span>
-                      <span className="font-display text-xl text-[#D4AF37]">${selectedService?.price}</span>
+                      <span className="font-display text-xl text-[#D4AF37]">{selectedService?.price === 0 ? 'Consultation' : `$${selectedService?.price}`}</span>
                     </div>
                   </div>
                 </StepWrapper>
@@ -525,7 +526,7 @@ export default function BookingPage() {
                           <Row label="Time" value={selectedTime} />
                           <div className="pt-3 border-t border-zinc-800 flex justify-between">
                             <span className="text-zinc-400 text-sm">Total</span>
-                            <span className="font-display text-xl text-[#D4AF37]">${selectedService?.price}</span>
+                            <span className="font-display text-xl text-[#D4AF37]">{selectedService?.price === 0 ? 'Consultation' : `$${selectedService?.price}`}</span>
                           </div>
                         </div>
                         {error && <p className="text-red-400 text-sm mb-4 flex items-center gap-2 justify-center"><AlertCircle className="w-4 h-4" />{error}</p>}
