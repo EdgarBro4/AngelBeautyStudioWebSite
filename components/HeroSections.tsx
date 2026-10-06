@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, type Variants } from 'framer-motion';
 import Link from 'next/link';
-import { ChevronDown, Sparkles, MessageSquare, Star, ChevronRight } from 'lucide-react';
+import { ChevronDown, Sparkles, MessageSquare, Star, ChevronRight, X } from 'lucide-react';
 import WorkerReviewModal from '@/components/WorkerReviewModal';
 import ServicesModal from '@/components/ServicesModal';
 import { supabase, type Worker, type Review } from '@/lib/supabase';
@@ -233,14 +233,15 @@ export function TeamPreview() {
 }
 
 export function StatsSection() {
+  const [showReviewChoices, setShowReviewChoices] = useState(false);
   const stats = [
     { value: '2,400+', label: 'Happy Clients' },
-    { value: '12', label: 'Years of Excellence' },
-    { value: '4.9', label: 'Average Rating' },
+    { value: '4.9', label: 'Google Rating' },
   ];
+
   return (
-    <section className="py-24 border-y border-zinc-800/50 bg-zinc-900/20">
-      <div className="max-w-5xl mx-auto px-6 grid grid-cols-3 gap-12">
+    <section className="py-24 border-y border-zinc-800/50 bg-zinc-900/20 relative">
+      <div className="max-w-3xl mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 gap-12">
         {stats.map((s, i) => (
           <motion.div
             key={s.label}
@@ -255,6 +256,56 @@ export function StatsSection() {
           </motion.div>
         ))}
       </div>
+
+      <motion.button
+        type="button"
+        onClick={() => setShowReviewChoices(true)}
+        className="mt-12 mx-auto flex items-center justify-center px-6 py-3 text-xs tracking-[0.2em] uppercase text-[#D4AF37] border border-[#D4AF37]/40 rounded-sm hover:bg-[#D4AF37]/10 hover:border-[#D4AF37] transition-colors"
+        whileHover={{ y: -2 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        Read More Reviews
+      </motion.button>
+
+      <AnimatePresence>
+        {showReviewChoices && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center px-6 bg-black/75 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowReviewChoices(false)}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="review-choices-title"
+              className="w-full max-w-md p-7 bg-zinc-950 border border-zinc-800 rounded-sm shadow-2xl"
+              initial={{ opacity: 0, y: 24, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4 mb-7">
+                <div>
+                  <p className="text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-2">Share Your Experience</p>
+                  <h3 id="review-choices-title" className="font-display text-3xl text-white">Read our reviews</h3>
+                </div>
+                <button type="button" onClick={() => setShowReviewChoices(false)} aria-label="Close reviews" className="text-zinc-500 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="grid gap-3">
+                <a href="https://www.google.com/maps/search/?api=1&query=Beauty+Angel+Studio%2C+5112+Hollywood+Blvd+%23110%2C+Los+Angeles%2C+CA+90027" target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 border border-zinc-800 rounded-sm text-white hover:border-[#D4AF37]/60 hover:bg-[#D4AF37]/5 transition-colors">
+                  <span><strong className="block font-medium">Google Reviews</strong><span className="text-xs text-zinc-500">See the latest Google rating</span></span><span className="text-[#D4AF37]">Open</span>
+                </a>
+                <a href="https://www.yelp.com/biz/beauty-angel-studio-los-angeles" target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 border border-zinc-800 rounded-sm text-white hover:border-[#D4AF37]/60 hover:bg-[#D4AF37]/5 transition-colors">
+                  <span><strong className="block font-medium">Yelp Reviews</strong><span className="text-xs text-zinc-500">Read client experiences on Yelp</span></span><span className="text-[#D4AF37]">Open</span>
+                </a>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
