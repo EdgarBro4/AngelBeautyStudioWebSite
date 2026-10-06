@@ -34,7 +34,7 @@ export default function ScrollVideoSection() {
   const rafId = useRef<number | null>(null);
 
   const [frameIndex, setFrameIndex] = useState(0);
-  const [loadedCount, setLoadedCount] = useState(0);
+  const [ready, setReady] = useState(false);
 
   function drawFrame(index: number) {
     const canvas = canvasRef.current;
@@ -57,6 +57,24 @@ export default function ScrollVideoSection() {
     ctx.drawImage(img, sx, sy, sw, sh);
   }
 
+  function ensureFrame(index: number) {
+    if (index < 0 || index >= TOTAL_FRAMES) return;
+    if (images.current[index]) return;
+    const img = new Image();
+    img.src = frameSrc(index + 1);
+    img.onload = () => {
+      if (index === activeFrame.current) drawFrame(index);
+      if (!ready && index === 0) setReady(true);
+    };
+    images.current[index] = img;
+  }
+
+  function prefetchAround(center: number, radius: number) {
+    const start = Math.max(0, center - radius);
+    const end = Math.min(TOTAL_FRAMES - 1, center + radius);
+    for (let i = start; i <= end; i++) ensureFrame(i);
+  }
+
   useEffect(() => {
     function resize() {
       const canvas = canvasRef.current;
@@ -71,17 +89,18 @@ export default function ScrollVideoSection() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    let loaded = 0;
-    images.current = Array.from({ length: TOTAL_FRAMES }, (_, i) => {
-      const img = new Image();
-      img.src = frameSrc(i + 1);
-      img.onload = () => {
-        loaded++;
-        setLoadedCount(loaded);
-        if (i === 0) drawFrame(0);
-      };
-      return img;
-    });
+    images.current = new Array(TOTAL_FRAMES);
+    ensureFrame(0);
+    prefetchAround(0, 20);
+    // Progressively prefetch remaining frames in the background
+    let nextBatch = 21;
+    const batchTimer = setInterval(() => {
+      if (nextBatch >= TOTAL_FRAMES) { clearInterval(batchTimer); return; }
+      const end = Math.min(nextBatch + 20, TOTAL_FRAMES);
+      for (let i = nextBatch; i < end; i++) ensureFrame(i);
+      nextBatch = end;
+    }, 300);
+    return () => clearInterval(batchTimer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -100,6 +119,8 @@ export default function ScrollVideoSection() {
         if (next !== activeFrame.current) {
           activeFrame.current = next;
           setFrameIndex(next);
+          ensureFrame(next);
+          prefetchAround(next, 10);
           drawFrame(next);
         }
       });
@@ -112,7 +133,7 @@ export default function ScrollVideoSection() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isLoading = loadedCount < 5;
+  const isLoading = !ready;
 
   const o1 = segmentOpacity(frameIndex, 0, 58);
   const o2 = segmentOpacity(frameIndex, 68, 128);
@@ -135,9 +156,9 @@ export default function ScrollVideoSection() {
             <div className="text-center">
               <div className="w-52 h-px bg-zinc-800 mx-auto mb-5 overflow-hidden rounded-full">
                 <div
-                  className="h-full rounded-full transition-all duration-200"
+                  className="h-full rounded-full transition-all duration-300"
                   style={{
-                    width: `${(loadedCount / TOTAL_FRAMES) * 100}%`,
+                    width: '100%',
                     background: 'linear-gradient(90deg, #D4AF37, #F0D060)',
                   }}
                 />
