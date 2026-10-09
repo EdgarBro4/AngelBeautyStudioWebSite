@@ -4,12 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
 const TOTAL_FRAMES = 240;
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-function frameSrc(n: number) {
-  const name = `frame_${String(n).padStart(4, '0')}.png`;
-  return `${SUPABASE_URL}/storage/v1/object/public/frames/${name}`;
-}
+const LOCAL_FRAME = '/images/768A63CD-73D6-44F0-9E14-2F89D9103B3B.PNG';
 
 function segmentOpacity(frame: number, start: number, end: number, fadeLen = 18): number {
   if (frame < start || frame > end) return 0;
@@ -47,7 +42,9 @@ export default function ScrollVideoSection() {
     const ch = canvas.height;
     const iw = img.naturalWidth;
     const ih = img.naturalHeight;
-    const scale = Math.min(cw / iw, ch / ih);
+    const coverScale = Math.max(cw / iw, ch / ih);
+    const zoom = 1 + (index / (TOTAL_FRAMES - 1)) * 0.12;
+    const scale = coverScale * zoom;
     const sw = iw * scale;
     const sh = ih * scale;
     const sx = (cw - sw) / 2;
@@ -60,13 +57,22 @@ export default function ScrollVideoSection() {
   function ensureFrame(index: number) {
     if (index < 0 || index >= TOTAL_FRAMES) return;
     if (images.current[index]) return;
-    const img = new Image();
-    img.src = frameSrc(index + 1);
-    img.onload = () => {
+    const existingImage = images.current[0];
+    if (existingImage) {
+      images.current[index] = existingImage;
       if (index === activeFrame.current) drawFrame(index);
-      if (!ready && index === 0) setReady(true);
+      return;
+    }
+
+    const img = new Image();
+    img.decoding = 'async';
+    images.current[0] = img;
+    img.src = LOCAL_FRAME;
+    img.onload = () => {
+      images.current[0] = img;
+      if (index === activeFrame.current) drawFrame(index);
+      if (!ready) setReady(true);
     };
-    images.current[index] = img;
   }
 
   function prefetchAround(center: number, radius: number) {
@@ -92,15 +98,7 @@ export default function ScrollVideoSection() {
     images.current = new Array(TOTAL_FRAMES);
     ensureFrame(0);
     prefetchAround(0, 20);
-    // Progressively prefetch remaining frames in the background
-    let nextBatch = 21;
-    const batchTimer = setInterval(() => {
-      if (nextBatch >= TOTAL_FRAMES) { clearInterval(batchTimer); return; }
-      const end = Math.min(nextBatch + 20, TOTAL_FRAMES);
-      for (let i = nextBatch; i < end; i++) ensureFrame(i);
-      nextBatch = end;
-    }, 300);
-    return () => clearInterval(batchTimer);
+    // Every scroll frame reuses the bundled local image; no network prefetch is needed.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
