@@ -22,6 +22,11 @@ interface TurnstileProps {
 export default function Turnstile({ siteKey, onVerify, onExpire, theme = 'dark' }: TurnstileProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const onVerifyRef = useRef(onVerify);
+  const onExpireRef = useRef(onExpire);
+
+  onVerifyRef.current = onVerify;
+  onExpireRef.current = onExpire;
 
   useEffect(() => {
     function render() {
@@ -29,8 +34,8 @@ export default function Turnstile({ siteKey, onVerify, onExpire, theme = 'dark' 
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
         theme,
-        callback: onVerify,
-        'expired-callback': onExpire,
+        callback: (token: string) => onVerifyRef.current(token),
+        'expired-callback': () => onExpireRef.current?.(),
       });
     }
 
@@ -48,7 +53,7 @@ export default function Turnstile({ siteKey, onVerify, onExpire, theme = 'dark' 
         window.turnstile.remove(widgetIdRef.current);
       }
     };
-  }, [siteKey, theme, onVerify, onExpire]);
+  }, [siteKey, theme]);
 
   return <div ref={containerRef} />;
 }
