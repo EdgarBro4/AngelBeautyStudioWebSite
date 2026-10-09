@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Scissors, Users, Calendar, CheckCircle2, Plus, Edit2, Trash2,
   Phone, Clock, Star, X, Save, LogOut, RefreshCw, MessageSquare,
-  Quote, ShieldAlert, Search, Upload, Mail, Settings, Loader2, ArrowLeft
+  Quote, ShieldAlert, ShieldCheck, Search, Upload, Mail, Settings, Loader2, ArrowLeft
 } from 'lucide-react';
 import { supabase, SUPABASE_URL, type Worker, type Service, type Appointment, type Review, type StudioSettings, type ServiceType } from '@/lib/supabase';
 
@@ -33,8 +33,11 @@ export default function AdminPage() {
   const [authState, setAuthState] = useState<'loading' | 'unauthenticated' | 'checking' | 'authorized' | 'denied'>('loading');
   const [userEmail, setUserEmail] = useState('');
   const [emailInput, setEmailInput] = useState('');
-  const [magicSent, setMagicSent] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [authCode, setAuthCode] = useState('');
+  const [demoCode, setDemoCode] = useState('');
   const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [sendError, setSendError] = useState('');
 
   async function checkWhitelist(email: string) {
@@ -61,37 +64,66 @@ export default function AdminPage() {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function sendMagicLink() {
+  async function sendCode() {
     const email = emailInput.trim().toLowerCase();
     if (!email) return;
     setSending(true); setSendError('');
 
-    const { data: allowed } = await supabase
-      .from('admin_whitelist')
-      .select('email')
-      .eq('email', email)
-      .maybeSingle();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-admin-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setSending(false);
 
-    if (!allowed) {
-      setSending(false);
-      setSendError('This email is not authorized to access the admin panel.');
+    if (!res.ok) {
+      setSendError(data.error ?? 'Failed to send code. Please try again.');
+      return;
+    }
+    if (data.demo && data.code) setDemoCode(data.code);
+    else setDemoCode('');
+    setCodeSent(true);
+  }
+
+  async function verifyCode() {
+    const email = emailInput.trim().toLowerCase();
+    setVerifying(true); setSendError('');
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-admin-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code: authCode }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.success) {
+      setVerifying(false);
+      setSendError(data.error ?? 'Verification failed. Please try again.');
       return;
     }
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: typeof window !== 'undefined' ? window.location.href : '' },
+    // Use the token_hash from the server to verify the OTP client-side
+    const { error: verifyErr } = await supabase.auth.verifyOtp({
+      type: 'magiclink',
+      token_hash: data.token_hash,
     });
-    setSending(false);
-    if (error) { setSendError(error.message); }
-    else { setMagicSent(true); }
+
+    setVerifying(false);
+    if (verifyErr) {
+      setSendError(verifyErr.message);
+      return;
+    }
+    // onAuthStateChange will pick up the new session and checkWhitelist
   }
 
   async function signOut() {
     await supabase.auth.signOut();
     setAuthState('unauthenticated');
-    setMagicSent(false);
+    setCodeSent(false);
     setEmailInput('');
+    setAuthCode('');
+    setDemoCode('');
   }
 
   if (authState === 'loading' || authState === 'checking') {
@@ -112,10 +144,10 @@ export default function AdminPage() {
           <div className="text-center mb-10">
             <img src="/BAS.svg" alt="Angel Beauty Studio" className="h-16 w-auto object-contain mx-auto mb-8" />
             <h1 className="font-display text-3xl text-white mb-1">Admin Portal</h1>
-            <p className="text-zinc-500 text-sm">Enter your authorized email to receive a sign-in link</p>
+            <p className="text-zinc-500 text-sm">Enter your authorized email to receive a sign-in code</p>
           </div>
 
-          {!magicSent ? (
+          {!codeSent ? (
             <div className="space-y-4">
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -123,33 +155,76 @@ export default function AdminPage() {
                   type="email"
                   value={emailInput}
                   onChange={(e) => { setEmailInput(e.target.value); setSendError(''); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') sendMagicLink(); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') sendCode(); }}
                   placeholder="your@email.com"
                   className="w-full bg-zinc-900 border border-zinc-700 rounded-sm pl-11 pr-4 py-4 text-white placeholder-zinc-600 focus:outline-none focus:border-[#D4AF37] text-sm transition-colors"
                 />
               </div>
               {sendError && <p className="text-red-400 text-xs">{sendError}</p>}
               <button
-                onClick={sendMagicLink}
+                onClick={sendCode}
                 disabled={sending || !emailInput.trim()}
                 className="w-full flex items-center justify-center gap-2 py-4 text-sm tracking-[0.15em] uppercase font-medium text-zinc-950 rounded-sm disabled:opacity-40 transition-all hover:scale-[1.02]"
                 style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}
               >
                 {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                {sending ? 'Sending...' : 'Send Sign-in Link'}
+                {sending ? 'Sending...' : 'Send Sign-in Code'}
               </button>
               <p className="text-xs text-zinc-700 text-center">Access restricted to authorized accounts only</p>
             </div>
           ) : (
-            <div className="text-center p-8 border border-[#D4AF37]/30 rounded-sm bg-zinc-900/40">
-              <div className="w-16 h-16 rounded-full bg-[#D4AF37]/10 flex items-center justify-center mx-auto mb-5">
-                <Mail className="w-8 h-8 text-[#D4AF37]" />
+            <div className="space-y-4">
+              <div className="text-center mb-2">
+                <div className="w-16 h-16 rounded-full bg-[#D4AF37]/10 flex items-center justify-center mx-auto mb-5">
+                  <Mail className="w-8 h-8 text-[#D4AF37]" />
+                </div>
+                <h3 className="text-white font-medium mb-2">Check your inbox</h3>
+                <p className="text-zinc-400 text-sm mb-1">A 6-digit sign-in code was sent to</p>
+                <p className="text-[#D4AF37] text-sm font-medium mb-6">{emailInput}</p>
               </div>
-              <h3 className="text-white font-medium mb-2">Check your inbox</h3>
-              <p className="text-zinc-400 text-sm mb-1">A sign-in link was sent to</p>
-              <p className="text-[#D4AF37] text-sm font-medium mb-6">{emailInput}</p>
-              <p className="text-zinc-600 text-xs mb-6">Click the link in the email to access the admin panel. It expires in 60 minutes.</p>
-              <button onClick={() => { setMagicSent(false); setSendError(''); }} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+              {demoCode && (
+                <div className="mb-2 px-4 py-3 border border-[#D4AF37]/30 bg-[#D4AF37]/5 rounded-sm">
+                  <p className="text-xs tracking-[0.25em] text-[#D4AF37] uppercase mb-1">Demo mode — Resend not configured</p>
+                  <p className="text-white font-mono text-lg tracking-[0.5em] text-center">{demoCode}</p>
+                </div>
+              )}
+              <div className="flex gap-3 justify-center">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <input
+                    key={i}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={authCode[i] || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/, '');
+                      const arr = authCode.split('');
+                      arr[i] = val;
+                      setAuthCode(arr.join(''));
+                      if (val && i < 5) {
+                        const next = document.getElementById(`admin-code-${i + 1}`);
+                        next?.focus();
+                      }
+                    }}
+                    id={`admin-code-${i}`}
+                    className="w-11 h-12 text-center text-lg font-medium bg-zinc-900 border border-zinc-700 rounded-sm text-white focus:outline-none focus:border-[#D4AF37] transition-colors"
+                  />
+                ))}
+              </div>
+              {sendError && <p className="text-red-400 text-xs text-center">{sendError}</p>}
+              <button
+                onClick={verifyCode}
+                disabled={verifying || authCode.length !== 6}
+                className="w-full flex items-center justify-center gap-2 py-4 text-sm tracking-[0.15em] uppercase font-medium text-zinc-950 rounded-sm disabled:opacity-40 transition-all hover:scale-[1.02]"
+                style={{ background: 'linear-gradient(135deg, #D4AF37, #F0D060)' }}
+              >
+                {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                {verifying ? 'Verifying...' : 'Verify & Sign In'}
+              </button>
+              <button
+                onClick={() => { setCodeSent(false); setSendError(''); setAuthCode(''); setDemoCode(''); }}
+                className="block text-xs text-zinc-500 hover:text-zinc-300 transition-colors mx-auto"
+              >
                 Use a different email
               </button>
             </div>
