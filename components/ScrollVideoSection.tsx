@@ -2,11 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { SUPABASE_URL } from '@/lib/supabase';
 
-const TOTAL_FRAMES = 240;
-const LOCAL_FRAME = '/images/768A63CD-73D6-44F0-9E14-2F89D9103B3B.PNG';
+const TOTAL_FRAMES = 300;
 
-function segmentOpacity(frame: number, start: number, end: number, fadeLen = 18): number {
+function frameUrl(index: number): string {
+  const num = String(index + 1).padStart(4, '0');
+  return `${SUPABASE_URL}/storage/v1/object/public/frames/frame_${num}.png`;
+}
+
+function segmentOpacity(frame: number, start: number, end: number, fadeLen = 22): number {
   if (frame < start || frame > end) return 0;
   if (frame < start + fadeLen) return (frame - start) / fadeLen;
   if (frame > end - fadeLen) return (end - frame) / fadeLen;
@@ -14,7 +19,7 @@ function segmentOpacity(frame: number, start: number, end: number, fadeLen = 18)
 }
 
 // Fades in at `start` and stays fully visible — never fades out
-function fadeInAndHold(frame: number, start: number, fadeLen = 15): number {
+function fadeInAndHold(frame: number, start: number, fadeLen = 18): number {
   if (frame < start) return 0;
   return Math.min(1, (frame - start) / fadeLen);
 }
@@ -24,12 +29,14 @@ const textShadow = '0 2px 40px rgba(0,0,0,0.95), 0 1px 6px rgba(0,0,0,1), 0 4px 
 export default function ScrollVideoSection() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const images = useRef<HTMLImageElement[]>([]);
+  const images = useRef<(HTMLImageElement | null)[]>(new Array(TOTAL_FRAMES));
+  const loadedCount = useRef(0);
   const activeFrame = useRef(0);
   const rafId = useRef<number | null>(null);
 
   const [frameIndex, setFrameIndex] = useState(0);
   const [ready, setReady] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
 
   function drawFrame(index: number) {
     const canvas = canvasRef.current;
@@ -43,10 +50,8 @@ export default function ScrollVideoSection() {
     const iw = img.naturalWidth;
     const ih = img.naturalHeight;
     const coverScale = Math.max(cw / iw, ch / ih);
-    const zoom = 1 + (index / (TOTAL_FRAMES - 1)) * 0.12;
-    const scale = coverScale * zoom;
-    const sw = iw * scale;
-    const sh = ih * scale;
+    const sw = iw * coverScale;
+    const sh = ih * coverScale;
     const sx = (cw - sw) / 2;
     const sy = (ch - sh) / 2;
 
@@ -54,31 +59,33 @@ export default function ScrollVideoSection() {
     ctx.drawImage(img, sx, sy, sw, sh);
   }
 
-  function ensureFrame(index: number) {
+  function loadFrame(index: number) {
     if (index < 0 || index >= TOTAL_FRAMES) return;
     if (images.current[index]) return;
-    const existingImage = images.current[0];
-    if (existingImage) {
-      images.current[index] = existingImage;
-      if (index === activeFrame.current) drawFrame(index);
-      return;
-    }
 
     const img = new Image();
     img.decoding = 'async';
-    images.current[0] = img;
-    img.src = LOCAL_FRAME;
+    img.src = frameUrl(index);
     img.onload = () => {
-      images.current[0] = img;
+      loadedCount.current++;
+      const pct = Math.round((loadedCount.current / TOTAL_FRAMES) * 100);
+      setLoadProgress(pct);
+      if (loadedCount.current >= 15 && !ready) setReady(true);
       if (index === activeFrame.current) drawFrame(index);
-      if (!ready) setReady(true);
     };
+    img.onerror = () => {
+      loadedCount.current++;
+      const pct = Math.round((loadedCount.current / TOTAL_FRAMES) * 100);
+      setLoadProgress(pct);
+      if (loadedCount.current >= 15 && !ready) setReady(true);
+    };
+    images.current[index] = img;
   }
 
   function prefetchAround(center: number, radius: number) {
     const start = Math.max(0, center - radius);
     const end = Math.min(TOTAL_FRAMES - 1, center + radius);
-    for (let i = start; i <= end; i++) ensureFrame(i);
+    for (let i = start; i <= end; i++) loadFrame(i);
   }
 
   useEffect(() => {
@@ -95,10 +102,19 @@ export default function ScrollVideoSection() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    images.current = new Array(TOTAL_FRAMES);
-    ensureFrame(0);
-    prefetchAround(0, 20);
-    // Every scroll frame reuses the bundled local image; no network prefetch is needed.
+    // Prefetch the first batch so the intro is ready immediately
+    for (let i = 0; i < 20; i++) loadFrame(i);
+    // Then progressively load the rest in the background
+    let i = 20;
+    const interval = setInterval(() => {
+      if (i >= TOTAL_FRAMES) {
+        clearInterval(interval);
+        return;
+      }
+      loadFrame(i);
+      i++;
+    }, 60);
+    return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -117,8 +133,7 @@ export default function ScrollVideoSection() {
         if (next !== activeFrame.current) {
           activeFrame.current = next;
           setFrameIndex(next);
-          ensureFrame(next);
-          prefetchAround(next, 10);
+          prefetchAround(next, 15);
           drawFrame(next);
         }
       });
@@ -133,16 +148,15 @@ export default function ScrollVideoSection() {
 
   const isLoading = !ready;
 
-  const o1 = segmentOpacity(frameIndex, 0, 58);
-  const o2 = segmentOpacity(frameIndex, 68, 128);
-  const o3 = segmentOpacity(frameIndex, 138, 198);
-  // CTA fades in at frame 205 and STAYS — never fades out
-  const o4 = fadeInAndHold(frameIndex, 205, 15);
+  // Text beats scaled for 300 frames (1.25x of original 240-frame timings)
+  const o1 = segmentOpacity(frameIndex, 0, 72);
+  const o2 = segmentOpacity(frameIndex, 85, 160);
+  const o3 = segmentOpacity(frameIndex, 172, 248);
+  const o4 = fadeInAndHold(frameIndex, 256, 18);
 
-  // Darken overlay as CTA appears, stays dark until end
-  const ctaDarkness = fadeInAndHold(frameIndex, 195, 20);
+  const ctaDarkness = fadeInAndHold(frameIndex, 244, 24);
 
-  const scrollHintOpacity = Math.max(0, 1 - frameIndex / 15);
+  const scrollHintOpacity = Math.max(0, 1 - frameIndex / 19);
 
   return (
     <section ref={containerRef} className="relative" style={{ height: '500vh' }}>
@@ -156,12 +170,12 @@ export default function ScrollVideoSection() {
                 <div
                   className="h-full rounded-full transition-all duration-300"
                   style={{
-                    width: '100%',
+                    width: `${loadProgress}%`,
                     background: 'linear-gradient(90deg, #D4AF37, #F0D060)',
                   }}
                 />
               </div>
-              <p className="text-[10px] text-zinc-600 tracking-[0.4em] uppercase">Loading</p>
+              <p className="text-[10px] text-zinc-600 tracking-[0.4em] uppercase">{loadProgress}%</p>
             </div>
           </div>
         )}
