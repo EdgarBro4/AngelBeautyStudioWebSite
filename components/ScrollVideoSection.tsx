@@ -6,9 +6,14 @@ import { SUPABASE_URL } from '@/lib/supabase';
 
 const TOTAL_FRAMES = 300;
 
-function frameUrl(index: number): string {
+// Try Supabase image resize (Pro feature). Falls back to original on error.
+function frameUrl(index: number, resized: boolean): string {
   const num = String(index + 1).padStart(4, '0');
-  return `${SUPABASE_URL}/storage/v1/object/public/frames/frame_${num}.png`;
+  const fileName = `frame_${num}.png`;
+  if (resized) {
+    return `${SUPABASE_URL}/storage/v1/render/image/public/frames/${fileName}?width=1280&quality=80&format=webp`;
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/frames/${fileName}`;
 }
 
 function segmentOpacity(frame: number, start: number, end: number, fadeLen = 22): number {
@@ -18,7 +23,6 @@ function segmentOpacity(frame: number, start: number, end: number, fadeLen = 22)
   return 1;
 }
 
-// Fades in at `start` and stays fully visible — never fades out
 function fadeInAndHold(frame: number, start: number, fadeLen = 18): number {
   if (frame < start) return 0;
   return Math.min(1, (frame - start) / fadeLen);
@@ -30,13 +34,13 @@ export default function ScrollVideoSection() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const images = useRef<(HTMLImageElement | null)[]>(new Array(TOTAL_FRAMES));
-  const loadedCount = useRef(0);
   const activeFrame = useRef(0);
+  const lastDrawn = useRef(0);
   const rafId = useRef<number | null>(null);
 
   const [frameIndex, setFrameIndex] = useState(0);
   const [ready, setReady] = useState(false);
-  const [loadProgress, setLoadProgress] = useState(0);
+  const [nearbyLoaded, setNearbyLoaded] = useState(0);
 
   function drawFrame(index: number) {
     const canvas = canvasRef.current;
@@ -57,6 +61,29 @@ export default function ScrollVideoSection() {
 
     ctx.clearRect(0, 0, cw, ch);
     ctx.drawImage(img, sx, sy, sw, sh);
+    lastDrawn.current = index;
+  }
+
+  // If the target frame isn't loaded yet, redraw the nearest loaded frame
+  // so slow connections get a smooth degradation instead of a blank canvas.
+  function drawNearestLoaded(target: number) {
+    if (images.current[target] && images.current[target]!.complete && images.current[target]!.naturalWidth > 0) {
+      drawFrame(target);
+      return;
+    }
+    let best = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < TOTAL_FRAMES; i++) {
+      const img = images.current[i];
+      if (img && img.complete && img.naturalWidth > 0) {
+        const d = Math.abs(i - target);
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      }
+    }
+    if (best >= 0) drawFrame(best);
   }
 
   function loadFrame(index: number) {
@@ -65,21 +92,36 @@ export default function ScrollVideoSection() {
 
     const img = new Image();
     img.decoding = 'async';
-    img.src = frameUrl(index);
+    img.src = frameUrl(index, true);
+
     img.onload = () => {
-      loadedCount.current++;
-      const pct = Math.round((loadedCount.current / TOTAL_FRAMES) * 100);
-      setLoadProgress(pct);
-      if (loadedCount.current >= 15 && !ready) setReady(true);
       if (index === activeFrame.current) drawFrame(index);
+      updateNearbyCount();
+      if (!ready && index < 10) setReady(true);
     };
     img.onerror = () => {
-      loadedCount.current++;
-      const pct = Math.round((loadedCount.current / TOTAL_FRAMES) * 100);
-      setLoadProgress(pct);
-      if (loadedCount.current >= 15 && !ready) setReady(true);
+      // Resize endpoint not available — fall back to original full-size image
+      const fallback = new Image();
+      fallback.decoding = 'async';
+      fallback.src = frameUrl(index, false);
+      fallback.onload = () => {
+        if (index === activeFrame.current) drawFrame(index);
+        updateNearbyCount();
+        if (!ready && index < 10) setReady(true);
+      };
+      images.current[index] = fallback;
     };
     images.current[index] = img;
+  }
+
+  function updateNearbyCount() {
+    const center = activeFrame.current;
+    let count = 0;
+    for (let i = Math.max(0, center - 8); i <= Math.min(TOTAL_FRAMES - 1, center + 8); i++) {
+      const img = images.current[i];
+      if (img && img.complete && img.naturalWidth > 0) count++;
+    }
+    setNearbyLoaded(count);
   }
 
   function prefetchAround(center: number, radius: number) {
@@ -94,7 +136,7 @@ export default function ScrollVideoSection() {
       if (!canvas) return;
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      drawFrame(activeFrame.current);
+      drawNearestLoaded(activeFrame.current);
     }
     resize();
     window.addEventListener('resize', resize);
@@ -102,19 +144,9 @@ export default function ScrollVideoSection() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    // Prefetch the first batch so the intro is ready immediately
-    for (let i = 0; i < 20; i++) loadFrame(i);
-    // Then progressively load the rest in the background
-    let i = 20;
-    const interval = setInterval(() => {
-      if (i >= TOTAL_FRAMES) {
-        clearInterval(interval);
-        return;
-      }
-      loadFrame(i);
-      i++;
-    }, 60);
-    return () => clearInterval(interval);
+    // Only load the first 10 frames upfront — no background preloading of all 300.
+    // Remaining frames load on-demand as the visitor scrolls.
+    for (let i = 0; i < 10; i++) loadFrame(i);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -133,8 +165,9 @@ export default function ScrollVideoSection() {
         if (next !== activeFrame.current) {
           activeFrame.current = next;
           setFrameIndex(next);
-          prefetchAround(next, 15);
-          drawFrame(next);
+          // Only load frames the visitor is about to see — small window ahead
+          prefetchAround(next, 8);
+          drawNearestLoaded(next);
         }
       });
     }
@@ -148,7 +181,7 @@ export default function ScrollVideoSection() {
 
   const isLoading = !ready;
 
-  // Text beats scaled for 300 frames (1.25x of original 240-frame timings)
+  // Text beats scaled for 300 frames
   const o1 = segmentOpacity(frameIndex, 0, 72);
   const o2 = segmentOpacity(frameIndex, 85, 160);
   const o3 = segmentOpacity(frameIndex, 172, 248);
@@ -170,23 +203,23 @@ export default function ScrollVideoSection() {
                 <div
                   className="h-full rounded-full transition-all duration-300"
                   style={{
-                    width: `${loadProgress}%`,
+                    width: '100%',
                     background: 'linear-gradient(90deg, #D4AF37, #F0D060)',
                   }}
                 />
               </div>
-              <p className="text-[10px] text-zinc-600 tracking-[0.4em] uppercase">{loadProgress}%</p>
+              <p className="text-[10px] text-zinc-600 tracking-[0.4em] uppercase">Loading</p>
             </div>
           </div>
         )}
 
-        {/* Canvas — pixel dimensions set in JS, CSS fills the sticky container */}
+        {/* Canvas */}
         <canvas
           ref={canvasRef}
           style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
         />
 
-        {/* Base dark overlay — always on */}
+        {/* Base dark overlay */}
         <div className="absolute inset-0 bg-black/50 pointer-events-none" />
 
         {/* Extra darkness layer that deepens when CTA appears */}
@@ -264,7 +297,7 @@ export default function ScrollVideoSection() {
             </h2>
           </div>
 
-          {/* Beat 4 — CTA: fades in, never fades out */}
+          {/* Beat 4 — CTA */}
           <div
             className="absolute text-center px-8 max-w-4xl w-full pointer-events-auto"
             style={{ opacity: o4, willChange: 'opacity' }}
