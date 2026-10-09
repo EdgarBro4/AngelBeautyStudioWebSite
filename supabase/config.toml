@@ -15,9 +15,3 @@ verify_jwt = false
 
 [functions.sms-appointment-notify]
 verify_jwt = false
-
-[functions.send-admin-code]
-verify_jwt = false
-
-[functions.verify-admin-code]
-verify_jwt = false
